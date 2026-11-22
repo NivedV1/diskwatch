@@ -65,7 +65,7 @@
           <header class="panel-header">
             <div>
               <h2 id="history-title">Temperature history</h2>
-              <p id="history-subtitle">Select a drive to view its history.</p>
+              <p>Compare all detected drives</p>
             </div>
             <div class="range-controls" role="group" aria-label="History range">
               <button type="button" data-days="1" aria-pressed="false">24h</button>
@@ -73,6 +73,7 @@
               <button type="button" data-days="30" aria-pressed="false">30d</button>
             </div>
           </header>
+          <div class="temperature-legend" id="temperature-legend" role="group" aria-label="Temperature series and SMART drive" hidden></div>
           <div class="chart" id="chart">
             <canvas id="plot" role="img" aria-label="Drive temperature and SMART history"></canvas>
             <div class="chart-empty" id="chart-empty">Waiting for drive readings.</div>
@@ -80,16 +81,16 @@
             <div class="chart-tooltip" id="chart-tooltip" hidden></div>
           </div>
           <div class="smart-legend" aria-label="SMART history legend">
-            <strong>SMART history</strong>
+            <strong id="smart-history-label">SMART history</strong>
             <span><i class="dot healthy"></i>Healthy</span>
             <span><i class="dot warning"></i>Attention</span>
             <span><i class="dot failed"></i>Failing</span>
             <span><i class="dot unknown"></i>No reading</span>
           </div>
-          <div class="chart-stats">
-            <div><span>Minimum</span><strong id="chart-min">—</strong></div>
-            <div><span>Average</span><strong id="chart-average">—</strong></div>
-            <div><span>Maximum</span><strong id="chart-max">—</strong></div>
+          <div class="chart-stats" role="group" aria-label="Temperature summary across the chart">
+            <div><span>Lowest temperature</span><strong id="chart-min">—</strong></div>
+            <div><span>Average temperature</span><strong id="chart-average">—</strong></div>
+            <div><span>Highest temperature</span><strong id="chart-max">—</strong></div>
           </div>
         </section>
 

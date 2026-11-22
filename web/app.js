@@ -6,6 +6,7 @@ const canvas = byId("plot");
 const context = canvas.getContext("2d");
 const tooltip = byId("chart-tooltip");
 const crosshair = byId("chart-crosshair");
+const legend = byId("temperature-legend");
 const stats = ["chart-min", "chart-average", "chart-max"];
 const formats = {
   full: new Intl.DateTimeFormat(undefined, {dateStyle: "medium", timeStyle: "short"}),
@@ -16,6 +17,7 @@ const formats = {
 const healthNames = {healthy: "Healthy", warning: "Attention", failed: "Failing", unknown: "Unknown"};
 const readingNames = {partial: "Partial reading", standby: "Standby", offline: "Offline", unavailable: "Unavailable"};
 const plotPriority = {unknown: 0, healthy: 1, warning: 2, failed: 3};
+const linePatterns = [[], [6, 3], [2, 3], [9, 3, 2, 3]];
 const metricLabels = {
   power_on_hours: ["Power-on hours", " h"],
   power_cycles: ["Power cycles", ""],
@@ -35,6 +37,7 @@ const state = {
   days: 7,
   history: null,
   historyRequest: null,
+  plot: null,
   chartMessage: "Waiting for drive readings.",
   layout: null,
   activePoint: -1,
@@ -131,7 +134,7 @@ function renderSummary(data) {
 function renderInventory() {
   const {drives} = state.dashboard;
   const body = byId("drive-rows");
-  const focused = document.activeElement?.dataset.drive;
+  const focused = body.contains(document.activeElement) ? document.activeElement.dataset.drive : null;
   byId("inventory-count").textContent = drives.length + (drives.length === 1 ? " drive" : " drives");
   if (!drives.length) {
     const empty = node("td", "empty", "No drive readings are available yet.");
@@ -165,11 +168,9 @@ function renderDetails() {
   const container = byId("drive-details");
   const drive = state.dashboard.drives.find((entry) => entry.drive_id === state.drive);
   if (!drive) {
-    byId("history-subtitle").textContent = "Select a drive to view its history.";
     container.replaceChildren(node("p", "empty", "Drive details will appear after collection."));
     return;
   }
-  byId("history-subtitle").textContent = drive.model + " · " + drive.path;
 
   const icon = node("span", "stat-icon disk");
   icon.setAttribute("aria-hidden", "true");
@@ -237,16 +238,16 @@ async function loadHistory(reset = true) {
   state.historyRequest = request;
   if (reset || !state.drive || !state.history) {
     state.history = null;
-    state.chartMessage = state.drive ? "Loading history…" : "No drive selected.";
+    state.chartMessage = state.drive ? "Loading history…" : "No drive readings are available.";
     renderHistory();
   }
   if (!state.drive) return;
   try {
-    const params = new URLSearchParams({drive: state.drive, days: String(state.days)});
+    const params = new URLSearchParams({all: "1", drive: state.drive, days: String(state.days)});
     const data = await getJSON("/api/history?" + params, request.signal);
     if (request.signal.aborted) return;
     state.history = data;
-    state.chartMessage = data.points.length ? "No temperatures reported in this range." : "No samples in this range.";
+    state.chartMessage = Object.keys(data.series).length ? "No temperatures reported in this range." : "No samples in this range.";
   } catch (error) {
     if (request.signal.aborted) return;
     state.history = null;
@@ -255,19 +256,84 @@ async function loadHistory(reset = true) {
   renderHistory();
 }
 
+function chartSeries() {
+  const drives = [...state.dashboard.drives];
+  drives.sort((a, b) => a.path.localeCompare(b.path) || a.drive_id.localeCompare(b.drive_id));
+  const modelCounts = new Map();
+  for (const drive of drives) modelCounts.set(drive.model, (modelCounts.get(drive.model) || 0) + 1);
+  return drives.flatMap((drive, slot) => {
+    if (drive.reading === "offline" && drive.drive_id !== state.drive) return [];
+    const label = modelCounts.get(drive.model) > 1 ? drive.model + " · " + drive.path : drive.model;
+    const points = state.history?.series[drive.drive_id] ?? [];
+    return [{drive, label, points, slot}];
+  });
+}
+
+function seriesColor(slot, styles) {
+  const color = styles.getPropertyValue("--chart-series-" + slot).trim();
+  if (color) return color;
+  const hue = Math.round(slot * 137.508 % 360);
+  const lightness = document.documentElement.dataset.theme === "dark" ? 73 : 37;
+  return `hsl(${hue}, 65%, ${lightness}%)`;
+}
+
+function seriesSwatch(item, styles) {
+  const swatch = node("i", "series-swatch");
+  swatch.setAttribute("aria-hidden", "true");
+  swatch.dataset.pattern = String(item.slot % linePatterns.length);
+  swatch.style.setProperty("--series-color", seriesColor(item.slot, styles));
+  return swatch;
+}
+
+function renderLegend() {
+  const series = state.plot?.series ?? [];
+  const focused = legend.contains(document.activeElement) ? document.activeElement.dataset.drive : null;
+  const styles = getComputedStyle(canvas);
+  legend.hidden = !series.length;
+  legend.replaceChildren(...series.map((item) => {
+    const {drive, label} = item;
+    const button = node("button", "series-button");
+    button.type = "button";
+    button.dataset.drive = drive.drive_id;
+    button.title = "Show SMART history for " + drive.path;
+    button.setAttribute("aria-pressed", String(drive.drive_id === state.drive));
+    button.append(seriesSwatch(item, styles), node("span", "series-label", label));
+    if (drive.reading === "offline") button.append(node("span", "series-offline", "Offline"));
+    return button;
+  }));
+  if (focused) legend.querySelector('[data-drive="' + focused + '"]')?.focus({preventScroll: true});
+}
+
 function renderHistory() {
-  const values = (state.history?.points ?? []).map((point) => point[1]).filter(Number.isFinite);
-  const valuesText = values.length
-    ? [Math.min(...values), values.reduce((sum, value) => sum + value, 0) / values.length, Math.max(...values)].map(temperature)
-    : ["—", "—", "—"];
+  const series = chartSeries();
+  const readings = new Map();
+  let min = Infinity, max = -Infinity, total = 0, count = 0;
+  for (const {drive, points} of series) {
+    for (const point of points) {
+      const [time, value] = point;
+      if (!readings.has(time)) readings.set(time, new Map());
+      readings.get(time).set(drive.drive_id, point);
+      if (!Number.isFinite(value)) continue;
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+      total += value;
+      count++;
+    }
+  }
+  const times = [...readings.keys()].sort((a, b) => a - b);
+  state.plot = {series, readings, times, lowest: count ? min : 20, highest: count ? max : 50};
+  renderLegend();
+  const selected = series.find(({drive}) => drive.drive_id === state.drive);
+  byId("smart-history-label").textContent = selected ? "SMART history · " + selected.label : "SMART history";
+  const valuesText = [count ? min : null, count ? total / count : null, count ? max : null].map(temperature);
   stats.forEach((id, index) => { byId(id).textContent = valuesText[index]; });
   const empty = byId("chart-empty");
-  empty.hidden = values.length > 0;
+  empty.hidden = count > 0;
   empty.textContent = state.chartMessage;
-  empty.classList.toggle("chart-has-status", Boolean(state.history?.points.length));
-  chart.tabIndex = state.history?.points.length ? 0 : -1;
-  canvas.setAttribute("aria-label", values.length
-    ? "Temperature range " + valuesText[0] + " to " + valuesText[2] + ". Use arrow keys on the chart to inspect readings."
+  empty.classList.toggle("chart-has-status", Boolean(times.length));
+  chart.tabIndex = times.length ? 0 : -1;
+  canvas.setAttribute("aria-label", count
+    ? "Drive temperature comparison. Range " + valuesText[0] + " to " + valuesText[2] + ". Use arrow keys on the chart to inspect readings."
     : state.chartMessage);
   drawChart();
 }
@@ -281,17 +347,15 @@ function drawChart() {
   canvas.height = Math.round(height * ratio);
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   const timeline = state.history;
-  if (!timeline) {
+  if (!timeline || !state.plot) {
     state.layout = null;
     return;
   }
-  const values = timeline.points.map((point) => point[1]).filter(Number.isFinite);
+  const {series, lowest, highest} = state.plot;
   const left = 40, right = width - 9, top = 12, bottom = height - 56;
   const statusY = height - 43;
   const interval = state.dashboard.interval;
   const x = (time) => left + (time - timeline.from) * (right - left) / (timeline.to - timeline.from);
-  const lowest = values.length ? Math.min(...values) : 20;
-  const highest = values.length ? Math.max(...values) : 50;
   const step = highest - lowest > 30 ? 10 : 5;
   const ceiling = Math.ceil((highest + step / 3) / step) * step;
   const floor = Math.min(ceiling - step * 3, Math.floor((lowest - step / 3) / step) * step);
@@ -314,44 +378,35 @@ function drawChart() {
     context.stroke();
   }
 
-  const gradient = context.createLinearGradient(0, top, 0, bottom);
-  gradient.addColorStop(0, color("fill-top"));
-  gradient.addColorStop(1, color("fill-bottom"));
-  context.lineWidth = 1.5;
-  context.strokeStyle = color("line");
-  context.fillStyle = gradient;
-
-  function drawSegment(segment) {
-    if (!segment.length) return;
-    const [start, first] = segment[0];
+  context.lineWidth = 1.7;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const {points, slot} of series) {
+    context.strokeStyle = seriesColor(slot, styles);
+    context.setLineDash(linePatterns[slot % linePatterns.length]);
     context.beginPath();
-    context.moveTo(x(start), y(first));
-    for (const [time, value] of segment.slice(1)) context.lineTo(x(time), y(value));
-    if (segment.length === 1) {
-      context.lineTo(x(start) + 1, y(first));
+    let previous = null;
+    let single = null;
+    for (const [time, value] of points) {
+      if (value === null || previous === null || time - previous > interval * 2.5) {
+        if (single) context.lineTo(single[0] + .01, single[1]);
+        single = value === null ? null : [x(time), y(value)];
+        if (single) context.moveTo(...single);
+      } else {
+        context.lineTo(x(time), y(value));
+        single = null;
+      }
+      previous = value === null ? null : time;
     }
+    if (single) context.lineTo(single[0] + .01, single[1]);
     context.stroke();
-    context.lineTo(x(segment.at(-1)[0]), bottom);
-    context.lineTo(x(start), bottom);
-    context.closePath();
-    context.fill();
   }
-
-  let segment = [];
-  for (const point of timeline.points) {
-    const prior = segment.at(-1);
-    if (point[1] === null || (prior && point[0] - prior[0] > interval * 2.5)) {
-      drawSegment(segment);
-      segment = [];
-    }
-    if (point[1] !== null) segment.push(point);
-  }
-  drawSegment(segment);
 
   const columns = new Uint8Array(Math.ceil(right - left));
-  timeline.points.forEach((point, index) => {
+  const smart = state.history.series[state.drive] ?? [];
+  smart.forEach((point, index) => {
     const start = Math.max(0, Math.floor(x(point[0]) - left));
-    const next = timeline.points[index + 1]?.[0] ?? timeline.to;
+    const next = smart[index + 1]?.[0] ?? timeline.to;
     const end = Math.max(start + 1, Math.ceil(x(Math.min(next, point[0] + interval)) - left));
     for (let col = start; col < Math.min(end, columns.length); col++) {
       columns[col] = Math.max(columns[col], plotPriority[point[2]]);
@@ -375,18 +430,29 @@ function drawChart() {
 }
 
 function tooltipAt(pointIndex) {
-  const {points} = state.history;
-  const [time, value, health, reading] = points[pointIndex];
+  if (state.activePoint === pointIndex) return;
   state.activePoint = pointIndex;
-  tooltip.replaceChildren(
-    node("strong", "", timestamp(time)),
-    node("span", "", [temperature(value), healthNames[health], readingNames[reading]].filter(Boolean).join(" · ")),
-  );
+  const {times, readings, series} = state.plot;
+  const time = times[pointIndex];
+  const atTime = readings.get(time);
+  const styles = getComputedStyle(canvas);
+  const rows = series.map((item) => {
+    const row = node("div", "temperature-tooltip-row");
+    row.append(seriesSwatch(item, styles), node("span", "series-label", item.label),
+      node("span", "tooltip-reading", temperature(atTime.get(item.drive.drive_id)?.[1])));
+    return row;
+  });
+  const selected = atTime.get(state.drive);
+  const smart = selected
+    ? [healthNames[selected[2]], readingNames[selected[3]]].filter(Boolean).join(" · ")
+    : "No reading";
+  tooltip.replaceChildren(node("strong", "", timestamp(time)), ...rows,
+    node("span", "tooltip-smart", "Selected drive SMART · " + smart));
   tooltip.hidden = false;
   crosshair.hidden = false;
   const x = state.layout.x(time);
   crosshair.style.left = x + "px";
-  tooltip.style.left = Math.min(state.layout.width - tooltip.offsetWidth - 3, Math.max(3, x + 9)) + "px";
+  tooltip.style.left = Math.max(3, Math.min(state.layout.width - tooltip.offsetWidth - 3, x + 9)) + "px";
 }
 
 function hideTooltip() {
@@ -396,9 +462,9 @@ function hideTooltip() {
 }
 
 chart.addEventListener("pointermove", (event) => {
-  const points = state.history?.points;
+  const times = state.plot?.times;
   const layout = state.layout;
-  if (!points?.length || !layout) return;
+  if (!times?.length || !layout) return;
   const localX = event.clientX - chart.getBoundingClientRect().left;
   if (localX < layout.left || localX > layout.right) {
     hideTooltip();
@@ -406,20 +472,20 @@ chart.addEventListener("pointermove", (event) => {
   }
   const time = state.history.from + (state.history.to - state.history.from) *
     (localX - layout.left) / (layout.right - layout.left);
-  let lo = 0, hi = points.length - 1;
+  let lo = 0, hi = times.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (points[mid][0] < time) lo = mid + 1;
+    if (times[mid] < time) lo = mid + 1;
     else hi = mid;
   }
-  if (lo && time - points[lo - 1][0] < Math.abs(points[lo][0] - time)) lo--;
-  if (Math.abs(points[lo][0] - time) <= state.dashboard.interval * 1.5) tooltipAt(lo);
+  if (lo && time - times[lo - 1] < Math.abs(times[lo] - time)) lo--;
+  if (Math.abs(times[lo] - time) <= state.dashboard.interval * 1.5) tooltipAt(lo);
   else hideTooltip();
 });
 chart.addEventListener("pointerleave", hideTooltip);
 chart.addEventListener("blur", hideTooltip);
 chart.addEventListener("keydown", (event) => {
-  const last = (state.history?.points.length ?? 0) - 1;
+  const last = (state.plot?.times.length ?? 0) - 1;
   if (last < 0 || !state.layout) return;
   if (event.key === "Escape") {
     hideTooltip();
@@ -435,19 +501,26 @@ chart.addEventListener("keydown", (event) => {
 });
 
 new ResizeObserver(drawChart).observe(chart);
-document.addEventListener("diskwatch-theme-change", drawChart);
+document.addEventListener("diskwatch-theme-change", () => {
+  renderLegend();
+  drawChart();
+});
 byId("refresh").addEventListener("click", refresh);
-byId("drive-rows").addEventListener("click", (event) => {
+function selectDrive(event) {
   const button = event.target.closest("button[data-drive]");
   if (!button || button.dataset.drive === state.drive) return;
   state.drive = button.dataset.drive;
   renderInventory();
   renderDetails();
-  loadHistory();
-  if (chart.getBoundingClientRect().bottom < 0) {
+  renderHistory();
+  const selected = state.dashboard.drives.find((drive) => drive.drive_id === state.drive);
+  if (selected?.reading === "offline" && !state.history?.series[state.drive]) loadHistory(false);
+  if (event.currentTarget !== legend && chart.getBoundingClientRect().bottom < 0) {
     byId("history-title").scrollIntoView({block: "start"});
   }
-});
+}
+legend.addEventListener("click", selectDrive);
+byId("drive-rows").addEventListener("click", selectDrive);
 const ranges = [...document.querySelectorAll("[data-days]")];
 for (const button of ranges) {
   button.addEventListener("click", () => {

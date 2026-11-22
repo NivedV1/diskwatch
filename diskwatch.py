@@ -363,17 +363,32 @@ def dashboard(db, now):
     return result
 
 
-def history(db, drive_id, days, now):
-    points = [
-        list(row) for row in db.execute(
-            """SELECT r.timestamp, s.temperature, s.health, s.reading
-               FROM samples s JOIN runs r ON r.id = s.run_id
-               WHERE s.drive_id = ? AND r.timestamp >= ?
-               ORDER BY r.timestamp, r.id""",
-            (drive_id, now - days * DAY),
-        )
-    ]
-    return {"from": now - days * DAY, "to": now, "points": points}
+def history(db, drive_id, days, now, all_drives=False):
+    start = now - days * DAY
+    rows = db.execute(
+        """WITH requested(drive_id) AS (
+               SELECT ? WHERE ? IS NOT NULL
+               UNION
+               SELECT drive_id FROM samples
+               WHERE ? AND run_id = (
+                   SELECT id FROM runs WHERE timestamp >= ? ORDER BY id DESC LIMIT 1
+               )
+           )
+           SELECT s.drive_id, r.timestamp, s.temperature, s.health, s.reading
+           FROM requested JOIN samples s USING (drive_id) JOIN runs r ON r.id = s.run_id
+           WHERE r.timestamp BETWEEN ? AND ?
+           ORDER BY r.timestamp, r.id""",
+        (drive_id, drive_id, all_drives, now - RETENTION, start, now),
+    )
+    result = {"from": start, "to": now}
+    if all_drives:
+        series = {}
+        for device, *point in rows:
+            series.setdefault(device, []).append(point)
+        result["series"] = series
+    else:
+        result["points"] = [list(row)[1:] for row in rows]
+    return result
 
 
 def seed_demo(path):
@@ -459,9 +474,14 @@ def handler_for(path, port):
             now = int(time.time())
             if request.path == "/api/history":
                 params = parse_qs(request.query)
-                drive_id = params.get("drive", [""])[0]
+                drive_id = params.get("drive", [None])[0]
                 window = params.get("days", ["7"])[0]
-                if not DRIVE_ID.fullmatch(drive_id) or window not in ("1", "7", "30"):
+                mode = params.get("all", ["0"])[0]
+                if (
+                    mode not in ("0", "1") or window not in ("1", "7", "30")
+                    or (drive_id is None and mode != "1")
+                    or (drive_id is not None and not DRIVE_ID.fullmatch(drive_id))
+                ):
                     self.send_json({"error": "Invalid drive or history range."}, 400)
                     return
             try:
@@ -474,7 +494,7 @@ def handler_for(path, port):
                 with closing(db), db:
                     db.execute("BEGIN")
                     payload = (dashboard(db, now) if request.path == "/api/dashboard"
-                               else history(db, drive_id, int(window), now))
+                               else history(db, drive_id, int(window), now, all_drives=mode == "1"))
             except sqlite3.Error:
                 logging.exception("Could not read drive history")
                 self.send_json({"error": "Drive history is temporarily unavailable."}, 503)
