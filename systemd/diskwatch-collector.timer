@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect Diskwatch SMART readings every five minutes
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=5min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

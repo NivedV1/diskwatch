@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Local Linux drive health and temperature monitoring.">
+  <title>Diskwatch · Drive health</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="branding" href="#overview" aria-label="Diskwatch overview">
+        <span class="brand-mark" aria-hidden="true"><i></i></span>
+        <span>diskwatch<span class="brand-period">.</span></span>
+      </a>
+      <nav class="navigation" aria-label="Dashboard">
+        <a href="#overview" class="nav-link active"><span class="nav-grid" aria-hidden="true"></span>Overview</a>
+        <a href="#drives" class="nav-link"><span class="nav-drive" aria-hidden="true"></span>Drives</a>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="host-icon" aria-hidden="true">⌁</span>
+        <div><span class="host-name" id="host-name">Local host</span><span class="host-caption">Linux system</span></div>
+      </div>
+    </aside>
+
+    <main id="overview">
+      <header class="page-header">
+        <div>
+          <h1>Drive health</h1>
+          <p>Monitor SMART status and temperatures for your storage drives.</p>
+        </div>
+        <div class="header-actions">
+          <span class="collector-state" id="collector-state"><i></i><span>Connecting</span></span>
+          <button type="button" class="refresh" id="refresh" aria-label="Refresh readings" title="Refresh readings">↻</button>
+        </div>
+      </header>
+
+      <div id="notice" class="notice" role="status" hidden></div>
+
+      <section class="summary" aria-label="Storage summary">
+        <article class="stat">
+          <div class="stat-top"><span>Drives detected</span><span class="stat-icon disk" aria-hidden="true"><i></i></span></div>
+          <strong id="drive-count">—</strong>
+          <p id="drive-caption">Waiting for a collection</p>
+        </article>
+        <article class="stat">
+          <div class="stat-top"><span>SMART health</span><span class="stat-icon pulse" aria-hidden="true">∿</span></div>
+          <strong id="healthy-count">—</strong>
+          <p id="healthy-caption">Waiting for a collection</p>
+        </article>
+        <article class="stat">
+          <div class="stat-top"><span>Highest temperature</span><span class="stat-icon heat" aria-hidden="true"><i></i></span></div>
+          <strong id="hottest-temp">—</strong>
+          <p id="hottest-caption">Waiting for a collection</p>
+        </article>
+      </section>
+
+      <div class="dashboard-grid">
+        <section class="panel history-panel" aria-labelledby="history-title">
+          <header class="panel-header">
+            <div>
+              <h2 id="history-title">Temperature history</h2>
+              <p id="history-subtitle">Select a drive to view its history.</p>
+            </div>
+            <div class="range-controls" role="group" aria-label="History range">
+              <button type="button" data-days="1" aria-pressed="false">24h</button>
+              <button type="button" data-days="7" aria-pressed="true">7d</button>
+              <button type="button" data-days="30" aria-pressed="false">30d</button>
+            </div>
+          </header>
+          <div class="chart" id="chart">
+            <canvas id="plot" role="img" aria-label="Drive temperature and SMART history"></canvas>
+            <div class="chart-empty" id="chart-empty">Waiting for drive readings.</div>
+            <div class="chart-crosshair" id="chart-crosshair" hidden></div>
+            <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+          </div>
+          <div class="smart-legend" aria-label="SMART history legend">
+            <strong>SMART history</strong>
+            <span><i class="dot healthy"></i>Healthy</span>
+            <span><i class="dot warning"></i>Attention</span>
+            <span><i class="dot failed"></i>Failing</span>
+            <span><i class="dot unknown"></i>No reading</span>
+          </div>
+          <div class="chart-stats">
+            <div><span>Minimum</span><strong id="chart-min">—</strong></div>
+            <div><span>Average</span><strong id="chart-average">—</strong></div>
+            <div><span>Maximum</span><strong id="chart-max">—</strong></div>
+          </div>
+        </section>
+
+        <section class="panel details-panel" aria-labelledby="details-title">
+          <header class="panel-header">
+            <div>
+              <h2 id="details-title">Drive details</h2>
+              <p>Latest reported values</p>
+            </div>
+          </header>
+          <div class="details-body" id="drive-details">
+            <p class="empty">Drive details will appear after collection.</p>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel drives-panel" id="drives" aria-labelledby="drives-title">
+        <header class="panel-header">
+          <div><h2 id="drives-title">Drive inventory</h2><p>Select a drive to inspect its history.</p></div>
+          <span class="inventory-count" id="inventory-count">0 drives</span>
+        </header>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Drive</th><th scope="col">Type</th><th scope="col">Capacity</th><th scope="col">SMART status</th><th scope="col">Temperature</th></tr></thead>
+            <tbody id="drive-rows"><tr><td colspan="5" class="empty">Waiting for drive readings.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer><span id="last-collection">Awaiting first collection</span><span>30-day retention</span></footer>
+    </main>
+  </div>
+</body>
+</html>

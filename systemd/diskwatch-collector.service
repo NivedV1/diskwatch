@@ -1,0 +1,19 @@
+[Unit]
+Description=Collect Diskwatch SMART readings
+
+[Service]
+Type=oneshot
+User=root
+Group=diskwatch-data
+StateDirectory=diskwatch
+StateDirectoryMode=0750
+UMask=0027
+ExecStart=/usr/bin/python3 -B /usr/local/lib/diskwatch/diskwatch.py collect
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
