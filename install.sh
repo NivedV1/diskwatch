@@ -19,7 +19,7 @@ project=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 target=/usr/local/lib/diskwatch
 install -d -m 0755 "$target" "$target/web" /etc/sysusers.d
 install -m 0644 "$project/diskwatch.py" "$target/diskwatch.py"
-for asset in index.html app.css app.js; do
+for asset in index.html app.css app.js theme.js; do
     install -m 0644 "$project/web/$asset" "$target/web/$asset"
 done
 install -m 0644 "$project/systemd/diskwatch.conf" /etc/sysusers.d/diskwatch.conf

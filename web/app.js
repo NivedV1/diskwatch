@@ -15,7 +15,6 @@ const formats = {
 };
 const healthNames = {healthy: "Healthy", warning: "Attention", failed: "Failing", unknown: "Unknown"};
 const readingNames = {partial: "Partial reading", standby: "Standby", offline: "Offline", unavailable: "Unavailable"};
-const plotColors = ["#dfe5eb", "#73c1ad", "#d99b43", "#c54858"];
 const plotPriority = {unknown: 0, healthy: 1, warning: 2, failed: 3};
 const metricLabels = {
   power_on_hours: ["Power-on hours", " h"],
@@ -298,13 +297,17 @@ function drawChart() {
   const floor = Math.min(ceiling - step * 3, Math.floor((lowest - step / 3) / step) * step);
   const y = (value) => bottom - (value - floor) * (bottom - top) / (ceiling - floor);
   state.layout = {left, right, width, x};
+  const styles = getComputedStyle(canvas);
+  const color = (name) => styles.getPropertyValue("--chart-" + name).trim();
+  const axis = color("axis");
+  const grid = color("grid");
   context.font = "12px system-ui, sans-serif";
   context.textBaseline = "middle";
   context.textAlign = "right";
   for (let value = floor; value <= ceiling; value += step) {
-    context.fillStyle = "#586a80";
+    context.fillStyle = axis;
     context.fillText(value + "°", left - 7, y(value));
-    context.strokeStyle = "#e6edf3";
+    context.strokeStyle = grid;
     context.beginPath();
     context.moveTo(left, y(value) + .5);
     context.lineTo(right, y(value) + .5);
@@ -312,10 +315,10 @@ function drawChart() {
   }
 
   const gradient = context.createLinearGradient(0, top, 0, bottom);
-  gradient.addColorStop(0, "#67c6b488");
-  gradient.addColorStop(1, "#9edbcc16");
+  gradient.addColorStop(0, color("fill-top"));
+  gradient.addColorStop(1, color("fill-bottom"));
   context.lineWidth = 1.5;
-  context.strokeStyle = "#0d8e7a";
+  context.strokeStyle = color("line");
   context.fillStyle = gradient;
 
   function drawSegment(segment) {
@@ -354,6 +357,7 @@ function drawChart() {
       columns[col] = Math.max(columns[col], plotPriority[point[2]]);
     }
   });
+  const plotColors = ["unknown", "healthy", "warning", "failed"].map(color);
   for (let col = 0; col < columns.length; col++) {
     context.fillStyle = plotColors[columns[col]];
     context.fillRect(left + col, statusY, 1, 8);
@@ -365,7 +369,7 @@ function drawChart() {
     const time = timeline.from + (timeline.to - timeline.from) * progress;
     const formatter = state.days === 1 ? formats.hour : formats.day;
     context.textAlign = tick === 0 ? "left" : tick === tickCount - 1 ? "right" : "center";
-    context.fillStyle = "#586a80";
+    context.fillStyle = axis;
     context.fillText(formatter.format(time * 1000), x(time), height - 16);
   }
 }
@@ -431,6 +435,7 @@ chart.addEventListener("keydown", (event) => {
 });
 
 new ResizeObserver(drawChart).observe(chart);
+document.addEventListener("diskwatch-theme-change", drawChart);
 byId("refresh").addEventListener("click", refresh);
 byId("drive-rows").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-drive]");

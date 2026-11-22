@@ -21,6 +21,7 @@ The collector runs with the device access needed for SMART. The unprivileged web
 - **Healthy** means the drive's SMART status passed and Diskwatch saw no warning conditions. **Attention** indicates conditions such as pending sectors or exhausted rated NVMe endurance. **Failing** is an explicit SMART failure.
 - Standby drives and failed readings appear as gaps in the chart. Available metrics depend on the drive and controller. Some USB adapters and RAID controllers need an explicit `smartctl` device type. Devices without SMART, such as typical SD cards and eMMC, are outside this collector's coverage.
 - Hover the chart or focus it and use the arrow keys to inspect samples. The health strip shows the most severe reported status where multiple samples share a pixel.
+- Use the moon button to switch between light and dark mode. The dashboard follows your system theme until you choose a mode, then remembers your choice in the browser.
 
 To check discovery and collection:
 

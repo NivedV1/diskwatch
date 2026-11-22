@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="Local Linux drive health and temperature monitoring.">
   <title>Diskwatch · Drive health</title>
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
 </head>
@@ -34,6 +35,7 @@
         </div>
         <div class="header-actions">
           <span class="collector-state" id="collector-state"><i></i><span>Connecting</span></span>
+          <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Dark mode" aria-pressed="false" title="Dark mode" hidden><i aria-hidden="true"></i></button>
           <button type="button" class="refresh" id="refresh" aria-label="Refresh readings" title="Refresh readings">↻</button>
         </div>
       </header>

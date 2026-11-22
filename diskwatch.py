@@ -413,7 +413,7 @@ def seed_demo(path):
 
 
 ASSETS = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
-          "/app.js": ("app.js", "text/javascript")}
+          "/app.js": ("app.js", "text/javascript"), "/theme.js": ("theme.js", "text/javascript")}
 
 
 def handler_for(path, port):
