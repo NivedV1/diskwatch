@@ -20,9 +20,12 @@ from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = Path("/var/lib/diskwatch/history.sqlite3")
-DAY = 86400
+HOUR = 3600
+DAY = 24 * HOUR
 INTERVAL = 300
 RETENTION = 30 * DAY
+HISTORY_RANGES = {"1h": HOUR, "24h": DAY, "7d": 7 * DAY, "30d": RETENTION}
+LEGACY_RANGES = {"1": "24h", "7": "7d", "30": "30d"}
 PORT = 8765
 DRIVE_ID = re.compile(r"[a-f0-9]{24}")
 
@@ -363,8 +366,8 @@ def dashboard(db, now):
     return result
 
 
-def history(db, drive_id, days, now, all_drives=False):
-    start = now - days * DAY
+def history(db, drive_id, window_seconds, now, all_drives=False):
+    start = now - window_seconds
     rows = db.execute(
         """WITH requested(drive_id) AS (
                SELECT ? WHERE ? IS NOT NULL
@@ -475,10 +478,11 @@ def handler_for(path, port):
             if request.path == "/api/history":
                 params = parse_qs(request.query)
                 drive_id = params.get("drive", [None])[0]
-                window = params.get("days", ["7"])[0]
+                legacy_range = LEGACY_RANGES.get(params.get("days", ["7"])[0])
+                window = HISTORY_RANGES.get(params.get("range", [legacy_range])[0])
                 mode = params.get("all", ["0"])[0]
                 if (
-                    mode not in ("0", "1") or window not in ("1", "7", "30")
+                    mode not in ("0", "1") or window is None
                     or (drive_id is None and mode != "1")
                     or (drive_id is not None and not DRIVE_ID.fullmatch(drive_id))
                 ):
@@ -494,7 +498,7 @@ def handler_for(path, port):
                 with closing(db), db:
                     db.execute("BEGIN")
                     payload = (dashboard(db, now) if request.path == "/api/dashboard"
-                               else history(db, drive_id, int(window), now, all_drives=mode == "1"))
+                               else history(db, drive_id, window, now, all_drives=mode == "1"))
             except sqlite3.Error:
                 logging.exception("Could not read drive history")
                 self.send_json({"error": "Drive history is temporarily unavailable."}, 503)

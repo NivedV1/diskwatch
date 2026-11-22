@@ -34,7 +34,7 @@ const metricLabels = {
 const state = {
   dashboard: null,
   drive: null,
-  days: 7,
+  range: "7d",
   history: null,
   historyRequest: null,
   plot: null,
@@ -243,7 +243,7 @@ async function loadHistory(reset = true) {
   }
   if (!state.drive) return;
   try {
-    const params = new URLSearchParams({all: "1", drive: state.drive, days: String(state.days)});
+    const params = new URLSearchParams({all: "1", drive: state.drive, range: state.range});
     const data = await getJSON("/api/history?" + params, request.signal);
     if (request.signal.aborted) return;
     state.history = data;
@@ -419,10 +419,10 @@ function drawChart() {
   }
 
   const tickCount = width > 500 ? 6 : width > 300 ? 4 : 3;
+  const formatter = state.range.endsWith("h") ? formats.hour : formats.day;
   for (let tick = 0; tick < tickCount; tick++) {
     const progress = tick / (tickCount - 1);
     const time = timeline.from + (timeline.to - timeline.from) * progress;
-    const formatter = state.days === 1 ? formats.hour : formats.day;
     context.textAlign = tick === 0 ? "left" : tick === tickCount - 1 ? "right" : "center";
     context.fillStyle = axis;
     context.fillText(formatter.format(time * 1000), x(time), height - 16);
@@ -521,10 +521,10 @@ function selectDrive(event) {
 }
 legend.addEventListener("click", selectDrive);
 byId("drive-rows").addEventListener("click", selectDrive);
-const ranges = [...document.querySelectorAll("[data-days]")];
+const ranges = [...document.querySelectorAll("[data-range]")];
 for (const button of ranges) {
   button.addEventListener("click", () => {
-    state.days = Number(button.dataset.days);
+    state.range = button.dataset.range;
     ranges.forEach((option) => option.setAttribute("aria-pressed", String(option === button)));
     loadHistory();
   });

@@ -1,6 +1,6 @@
 # Diskwatch
 
-Diskwatch reads SMART health and temperature from a Linux host's HDDs and SATA, SAS, or NVMe SSDs. It samples about every five minutes and keeps a rolling 30 days in SQLite. The dashboard compares drive temperatures in one color-coded chart and shows the selected drive's SMART history and latest metrics. It offers 24-hour, 7-day, and 30-day views.
+Diskwatch reads SMART health and temperature from a Linux host's HDDs and SATA, SAS, or NVMe SSDs. It samples about every five minutes and keeps a rolling 30 days in SQLite. The dashboard compares drive temperatures in one color-coded chart and shows the selected drive's SMART history and latest metrics. It offers 1-hour, 24-hour, 7-day, and 30-day views.
 
 ## Install on Linux
 
